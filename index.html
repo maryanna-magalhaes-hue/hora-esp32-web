@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Leituras do ESP32</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+  <h2>Últimas leituras do ESP32</h2>
+  <ul id="leituras"></ul>
+
+  <script>
+    // --- CONFIG DO SEU FIREBASE ---
+    const firebaseConfig = {
+      apiKey: "AIZaSybJEqje9M_1IOuubqGb6Ze0b19x-Ur-pX",
+      authDomain: "horaesp32.firebaseapp.com",
+      databaseURL: "https://horaesp32-default-rtdb.firebaseio.com",
+      projectId: "horaesp32",
+      storageBucket: "horaesp32.appspot.com",
+      messagingSenderId: "xxxx",
+      appId: "xxxx"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // --- LER AS ÚLTIMAS 10 LEITURAS ---
+    db.ref("leituras").limitToLast(10).on("value", (snapshot) => {
+      const lista = document.getElementById("leituras");
+      lista.innerHTML = "";
+      snapshot.forEach((child) => {
+        const li = document.createElement("li");
+        li.textContent = child.val();
+        lista.appendChild(li);
+      });
+    });
+  </script>
+</body>
+</html>
