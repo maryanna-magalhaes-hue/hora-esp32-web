@@ -1,17 +1,64 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <title>Leituras do ESP32</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f3f6fa;
+      color: #333;
+      margin: 40px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #2c3e50;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background-color: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #3498db;
+      color: white;
+    }
+
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+  </style>
 </head>
 <body>
-  <h2>Últimas leituras do ESP32</h2>
-  <ul id="leituras"></ul>
+  <h2>Últimas Leituras do ESP32</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Peso (kg)</th>
+        <th>Data</th>
+        <th>Hora</th>
+      </tr>
+    </thead>
+    <tbody id="tabela-leituras"></tbody>
+  </table>
 
   <script>
-    // --- CONFIG DO SEU FIREBASE ---
+    // --- CONFIGURAÇÃO DO FIREBASE ---
     const firebaseConfig = {
       apiKey: "AIzaSyBjE8Eqje9M_TlOouqbGEz0b19x-Ur-pXc",
       authDomain: "horaesp32.firebaseapp.com",
@@ -22,17 +69,31 @@
       appId: "xxxx"
     };
 
+    // Inicializa o Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // --- LER AS ÚLTIMAS 10 LEITURAS ---
+    // Lê as últimas 10 leituras
     db.ref("leituras").limitToLast(10).on("value", (snapshot) => {
-      const lista = document.getElementById("leituras");
-      lista.innerHTML = "";
+      const tabela = document.getElementById("tabela-leituras");
+      tabela.innerHTML = "";
+
       snapshot.forEach((child) => {
-        const li = document.createElement("li");
-        li.textContent = child.val();
-        lista.appendChild(li);
+        const dado = child.val();
+
+        // Espera formato: "Peso: 12.34 kg | Data: 2025-11-07 | Hora: 20:35:22"
+        const partes = dado.split("|");
+        const peso = partes[0]?.replace("Peso:", "").replace("kg", "").trim() || "-";
+        const data = partes[1]?.replace("Data:", "").trim() || "-";
+        const hora = partes[2]?.replace("Hora:", "").trim() || "-";
+
+        const linha = document.createElement("tr");
+        linha.innerHTML = `
+          <td>${peso}</td>
+          <td>${data}</td>
+          <td>${hora}</td>
+        `;
+        tabela.appendChild(linha);
       });
     });
   </script>
