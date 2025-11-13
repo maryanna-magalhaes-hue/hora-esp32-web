@@ -1,101 +1,90 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Leituras do ESP32</title>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <meta charset="UTF-8" />
+  <title>Últimas Leituras do ESP32</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #f3f6fa;
-      color: #333;
-      margin: 40px;
-    }
-
-    h2 {
+      background-color: #f4f7fb;
       text-align: center;
-      color: #2c3e50;
+      padding: 20px;
     }
-
+    h2 {
+      color: #333;
+    }
     table {
-      width: 100%;
+      width: 80%;
+      margin: 20px auto;
       border-collapse: collapse;
-      margin-top: 20px;
-      background-color: white;
-      border-radius: 10px;
-      overflow: hidden;
+      background: white;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-
     th, td {
+      border: 1px solid #ccc;
       padding: 12px;
-      text-align: center;
-      border-bottom: 1px solid #ddd;
     }
-
     th {
-      background-color: #3498db;
+      background-color: #2196F3;
       color: white;
     }
-
-    tr:hover {
-      background-color: #f1f1f1;
+    tr:nth-child(even) {
+      background-color: #f2f2f2;
     }
   </style>
 </head>
 <body>
-  <h2>Últimas Leituras do ESP32</h2>
-  <table>
+  <h2>📊 Últimas Leituras do ESP32</h2>
+
+  <table id="tabela">
     <thead>
-      <tr>
-        <th>Peso (kg)</th>
-        <th>Data</th>
-        <th>Hora</th>
-      </tr>
+      <tr><th>Peso (g)</th><th>Data</th><th>Hora</th></tr>
     </thead>
-    <tbody id="tabela-leituras"></tbody>
+    <tbody><tr><td colspan="3">Carregando...</td></tr></tbody>
   </table>
 
+  <!-- Firebase SDK (versão compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
   <script>
-    // --- CONFIGURAÇÃO DO FIREBASE ---
+    // Configuração do seu projeto Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyBjE8Eqje9M_TlOouqbGEz0b19x-Ur-pXc",
-      authDomain: "horaesp32.firebaseapp.com",
+      authDomain: "horaesp32-e6279.firebaseapp.com",
       databaseURL: "https://horaesp32-e6279-default-rtdb.firebaseio.com",
-      projectId: "horaesp32",
-      storageBucket: "horaesp32.appspot.com",
-      messagingSenderId: "xxxx",
-      appId: "xxxx"
+      projectId: "horaesp32-e6279",
+      storageBucket: "horaesp32-e6279.firebasestorage.app",
+      messagingSenderId: "173966365657",
+      appId: "1:173966365657:web:1a3035722eed04f60fffc8",
+      measurementId: "G-X8EY1MFPPT"
     };
 
-    // Inicializa o Firebase
+    // Inicializa Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // Lê as últimas 10 leituras
-    db.ref("leituras").limitToLast(10).on("value", (snapshot) => {
-      const tabela = document.getElementById("tabela-leituras");
+    // Busca as últimas 20 leituras e exibe na tabela
+    const tabela = document.querySelector("#tabela tbody");
+    db.ref("/leituras").limitToLast(20).on("value", snapshot => {
       tabela.innerHTML = "";
-
-      snapshot.forEach((child) => {
-        const dado = child.val();
-
-        // Espera formato: "Peso: 12.34 kg | Data: 2025-11-07 | Hora: 20:35:22"
-        const partes = dado.split("|");
-        const peso = partes[0]?.replace("Peso:", "").replace("kg", "").trim() || "-";
-        const data = partes[1]?.replace("Data:", "").trim() || "-";
-        const hora = partes[2]?.replace("Hora:", "").trim() || "-";
-
+      if (!snapshot.exists()) {
+        tabela.innerHTML = "<tr><td colspan='3'>Sem dados encontrados</td></tr>";
+        return;
+      }
+      snapshot.forEach(child => {
+        const item = child.val();
         const linha = document.createElement("tr");
-        linha.innerHTML = `
-          <td>${peso}</td>
-          <td>${data}</td>
-          <td>${hora}</td>
-        `;
-        tabela.appendChild(linha);
+        linha.innerHTML = `<td>${item.peso?.toFixed ? item.peso.toFixed(2) : item.peso}</td>
+                           <td>${item.data || "-"}</td>
+                           <td>${item.hora || "-"}</td>`;
+        tabela.prepend(linha); // mais recente no topo
       });
+    }, error => {
+      tabela.innerHTML = `<tr><td colspan='3'>Erro: ${error.message}</td></tr>`;
+      console.error(error);
     });
   </script>
 </body>
 </html>
+
