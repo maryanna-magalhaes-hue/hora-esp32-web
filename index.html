@@ -13,14 +13,11 @@
     .badge-status-na { background:#28a745; }
     .badge-status-fora { background:#dc3545; }
     .container-top { margin-top:22px; margin-bottom:12px; }
-    .banner-img { max-height:70px; object-fit:contain; margin-right:12px; }
   </style>
 </head>
 <body>
   <div class="container container-top">
     <div class="d-flex align-items-center justify-content-center mb-3">
-      <!-- imagem enviada pelo usuário (caminho local) -->
-      <img src="/mnt/data/9e5796f8-b4fd-48b8-94f5-ee8557e188f9.png" class="banner-img" alt="banner">
       <h2 class="text-center">📊 Últimas Leituras do ESP32</h2>
     </div>
 
@@ -42,7 +39,6 @@
                   </tr>
                 </thead>
                 <tbody id="leituras-tbody">
-                  <!-- Linhas preenchidas via JS -->
                 </tbody>
               </table>
             </div>
@@ -63,38 +59,23 @@
             </div>
           </div>
         </div>
-        <div class="mt-3 text-muted small">
-          <p><strong>Observação:</strong> os logs são gerados aqui a partir das entradas que o ESP enviou ao Firebase. Se quer ver exatamente as mesmas mensagens do Serial, confirme que o ESP imprime no Serial antes de enviar (o que já ocorre no seu sketch).</p>
-        </div>
       </div>
     </div>
   </div>
 
 <script>
-/*
-  Página que lê as últimas leituras do Realtime Database via REST e:
-   - preenche a tabela com as últimas leituras
-   - mantém um log similar às mensagens do monitor serial:
-       "Enviado ao Firebase com sucesso!"
-       "Peso: 1178.86g | Status: na_cama"
-  Ajuste DATABASE_URL se necessário.
-*/
-
-const DATABASE_URL = "https://horaesp32-e6279-default-rtdb.firebaseio.com"; // sua URL
-const POLL_INTERVAL_MS = 2500; // 2.5s - mesmo do ESP
-const MAX_ROWS = 50;            // quantas linhas mostrar na tabela
-const PATH = "/leituras";       // caminho usado no sketch do ESP
+const DATABASE_URL = "https://horaesp32-e6279-default-rtdb.firebaseio.com";
+const POLL_INTERVAL_MS = 2500;
+const MAX_ROWS = 50;
+const PATH = "/leituras";
 
 const tbody = document.getElementById('leituras-tbody');
 const logsEl = document.getElementById('logs');
 const limparBtn = document.getElementById('limparLogs');
 
-let seenKeys = new Set(); // chaves já vistas para evitar duplicação de logs
-let lastFetched = null;
+let seenKeys = new Set();
 
-// montar URL REST para pegar últimas entradas em ordem (limitToLast)
 function buildUrl() {
-  // orderBy="$key"&limitToLast=MAX_ROWS
   return `${DATABASE_URL}${PATH}.json?orderBy="$key"&limitToLast=${MAX_ROWS}`;
 }
 
@@ -118,18 +99,10 @@ function clearTable() {
 }
 
 function fillTableFromData(dataObj) {
-  // dataObj é um objeto com chaves únicas do firebase -> { key1: {peso:..., data:..., hora:..., status:...}, ... }
-  if (!dataObj) {
-    // sem dados
-    return;
-  }
-  // transformar em array ordenado por chave (que são timestamps / pseudo)
+  if (!dataObj) return;
   const items = Object.entries(dataObj).map(([k, v]) => ({ key: k, ...v }));
-  // ordenar por key (supondo que push gera ordem cronológica pelo nome das chaves)
   items.sort((a,b) => a.key.localeCompare(b.key));
-  // atualizar tabela (limpa e insere)
   clearTable();
-  // exibir do mais novo para o mais antigo (opcional: inverte)
   const reversed = items.slice().reverse();
   reversed.forEach(item => {
     const tr = document.createElement('tr');
@@ -153,53 +126,39 @@ async function pollOnce() {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.error('Erro ao buscar leituras', res.status);
       addLogLine(`Erro ao buscar leituras: HTTP ${res.status}`);
       return;
     }
     const data = await res.json();
     fillTableFromData(data);
 
-    // gerar logs parecidos com Serial para as entradas novas
     if (data) {
-      // cada chave do objeto
       const entries = Object.entries(data);
-      // ordena para processar do mais antigo ao mais novo
       entries.sort((a,b) => a[0].localeCompare(b[0]));
       for (const [key, value] of entries) {
         if (!seenKeys.has(key)) {
-          // novo
           seenKeys.add(key);
-          // criar a mensagem tal como no Serial do ESP
           const peso = (value.peso !== undefined) ? Number(value.peso).toFixed(2) : '0.00';
           const status = value.status || 'desconhecido';
-          // Mensagens idênticas às do Serial que você mostrou:
           addLogLine('Enviado ao Firebase com sucesso!');
           addLogLine(`Peso: ${peso}g | Status: ${status}`);
         }
       }
     }
   } catch (err) {
-    console.error('Erro fetch:', err);
     addLogLine('Erro ao conectar ao Firebase: ' + err.message);
   }
 }
 
-// limpar logs
 limparBtn.addEventListener('click', () => {
   logsEl.textContent = '';
 });
 
-// polling periódico
-let pollTimer = null;
 async function startPolling() {
-  // fetch inicial
   await pollOnce();
-  // cron
-  pollTimer = setInterval(pollOnce, POLL_INTERVAL_MS);
+  setInterval(pollOnce, POLL_INTERVAL_MS);
 }
 
-// iniciar
 startPolling();
 </script>
 </body>
