@@ -1,90 +1,206 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Últimas Leituras do ESP32</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f7fb;
-      text-align: center;
-      padding: 20px;
-    }
-    h2 {
-      color: #333;
-    }
-    table {
-      width: 80%;
-      margin: 20px auto;
-      border-collapse: collapse;
-      background: white;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 12px;
-    }
-    th {
-      background-color: #2196F3;
-      color: white;
-    }
-    tr:nth-child(even) {
-      background-color: #f2f2f2;
-    }
+    body { background:#f5f7fb; }
+    .card { box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .table-fixed { max-height:420px; overflow:auto; display:block; }
+    pre.log { height:220px; overflow:auto; background:#0b1220; color:#cfe8ff; padding:12px; border-radius:6px; }
+    .badge-status-na { background:#28a745; }
+    .badge-status-fora { background:#dc3545; }
+    .container-top { margin-top:22px; margin-bottom:12px; }
+    .banner-img { max-height:70px; object-fit:contain; margin-right:12px; }
   </style>
 </head>
 <body>
-  <h2>📊 Últimas Leituras do ESP32</h2>
+  <div class="container container-top">
+    <div class="d-flex align-items-center justify-content-center mb-3">
+      <!-- imagem enviada pelo usuário (caminho local) -->
+      <img src="/mnt/data/9e5796f8-b4fd-48b8-94f5-ee8557e188f9.png" class="banner-img" alt="banner">
+      <h2 class="text-center">📊 Últimas Leituras do ESP32</h2>
+    </div>
 
-  <table id="tabela">
-    <thead>
-      <tr><th>Peso (g)</th><th>Data</th><th>Hora</th></tr>
-    </thead>
-    <tbody><tr><td colspan="3">Carregando...</td></tr></tbody>
-  </table>
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="card">
+          <div class="card-header bg-primary text-white">
+            <strong>Painel de Leituras</strong>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive table-fixed">
+              <table class="table table-striped mb-0">
+                <thead class="table-primary">
+                  <tr>
+                    <th>Peso (g)</th>
+                    <th>Data</th>
+                    <th>Hora</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="leituras-tbody">
+                  <!-- Linhas preenchidas via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
 
-  <!-- Firebase SDK (versão compat) -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-header bg-info text-white">
+            <strong>Logs (monitor serial)</strong>
+          </div>
+          <div class="card-body">
+            <pre id="logs" class="log" aria-live="polite"></pre>
+            <div class="mt-2 d-flex justify-content-between">
+              <small class="text-muted">Atualizações automáticas a cada 2.5s</small>
+              <button id="limparLogs" class="btn btn-sm btn-outline-secondary">Limpar</button>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 text-muted small">
+          <p><strong>Observação:</strong> os logs são gerados aqui a partir das entradas que o ESP enviou ao Firebase. Se quer ver exatamente as mesmas mensagens do Serial, confirme que o ESP imprime no Serial antes de enviar (o que já ocorre no seu sketch).</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  <script>
-    // Configuração do seu projeto Firebase
-    const firebaseConfig = {
-      apiKey: "AIzaSyBjE8Eqje9M_TlOouqbGEz0b19x-Ur-pXc",
-      authDomain: "horaesp32-e6279.firebaseapp.com",
-      databaseURL: "https://horaesp32-e6279-default-rtdb.firebaseio.com",
-      projectId: "horaesp32-e6279",
-      storageBucket: "horaesp32-e6279.firebasestorage.app",
-      messagingSenderId: "173966365657",
-      appId: "1:173966365657:web:1a3035722eed04f60fffc8",
-      measurementId: "G-X8EY1MFPPT"
-    };
+<script>
+/*
+  Página que lê as últimas leituras do Realtime Database via REST e:
+   - preenche a tabela com as últimas leituras
+   - mantém um log similar às mensagens do monitor serial:
+       "Enviado ao Firebase com sucesso!"
+       "Peso: 1178.86g | Status: na_cama"
+  Ajuste DATABASE_URL se necessário.
+*/
 
-    // Inicializa Firebase
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+const DATABASE_URL = "https://horaesp32-e6279-default-rtdb.firebaseio.com"; // sua URL
+const POLL_INTERVAL_MS = 2500; // 2.5s - mesmo do ESP
+const MAX_ROWS = 50;            // quantas linhas mostrar na tabela
+const PATH = "/leituras";       // caminho usado no sketch do ESP
 
-    // Busca as últimas 20 leituras e exibe na tabela
-    const tabela = document.querySelector("#tabela tbody");
-    db.ref("/leituras").limitToLast(20).on("value", snapshot => {
-      tabela.innerHTML = "";
-      if (!snapshot.exists()) {
-        tabela.innerHTML = "<tr><td colspan='3'>Sem dados encontrados</td></tr>";
-        return;
+const tbody = document.getElementById('leituras-tbody');
+const logsEl = document.getElementById('logs');
+const limparBtn = document.getElementById('limparLogs');
+
+let seenKeys = new Set(); // chaves já vistas para evitar duplicação de logs
+let lastFetched = null;
+
+// montar URL REST para pegar últimas entradas em ordem (limitToLast)
+function buildUrl() {
+  // orderBy="$key"&limitToLast=MAX_ROWS
+  return `${DATABASE_URL}${PATH}.json?orderBy="$key"&limitToLast=${MAX_ROWS}`;
+}
+
+function formatStatusBadge(status) {
+  if (!status) return '';
+  if (status === 'na_cama') {
+    return '<span class="badge badge-status-na text-white">NA CAMA</span>';
+  } else if (status === 'saiu_da_cama') {
+    return '<span class="badge badge-status-fora text-white">SAIU DA CAMA</span>';
+  }
+  return `<span class="badge bg-secondary">${status}</span>`;
+}
+
+function addLogLine(text) {
+  const now = new Date().toLocaleTimeString();
+  logsEl.textContent = `[${now}] ${text}\n` + logsEl.textContent;
+}
+
+function clearTable() {
+  tbody.innerHTML = '';
+}
+
+function fillTableFromData(dataObj) {
+  // dataObj é um objeto com chaves únicas do firebase -> { key1: {peso:..., data:..., hora:..., status:...}, ... }
+  if (!dataObj) {
+    // sem dados
+    return;
+  }
+  // transformar em array ordenado por chave (que são timestamps / pseudo)
+  const items = Object.entries(dataObj).map(([k, v]) => ({ key: k, ...v }));
+  // ordenar por key (supondo que push gera ordem cronológica pelo nome das chaves)
+  items.sort((a,b) => a.key.localeCompare(b.key));
+  // atualizar tabela (limpa e insere)
+  clearTable();
+  // exibir do mais novo para o mais antigo (opcional: inverte)
+  const reversed = items.slice().reverse();
+  reversed.forEach(item => {
+    const tr = document.createElement('tr');
+    const peso = (item.peso !== undefined) ? Number(item.peso).toFixed(2) : '-';
+    const data = item.data || '-';
+    const hora = item.hora || '-';
+    const status = item.status || '-';
+
+    tr.innerHTML = `
+      <td class="align-middle">${peso}</td>
+      <td class="align-middle">${data}</td>
+      <td class="align-middle">${hora}</td>
+      <td class="align-middle">${formatStatusBadge(status)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function pollOnce() {
+  const url = buildUrl();
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error('Erro ao buscar leituras', res.status);
+      addLogLine(`Erro ao buscar leituras: HTTP ${res.status}`);
+      return;
+    }
+    const data = await res.json();
+    fillTableFromData(data);
+
+    // gerar logs parecidos com Serial para as entradas novas
+    if (data) {
+      // cada chave do objeto
+      const entries = Object.entries(data);
+      // ordena para processar do mais antigo ao mais novo
+      entries.sort((a,b) => a[0].localeCompare(b[0]));
+      for (const [key, value] of entries) {
+        if (!seenKeys.has(key)) {
+          // novo
+          seenKeys.add(key);
+          // criar a mensagem tal como no Serial do ESP
+          const peso = (value.peso !== undefined) ? Number(value.peso).toFixed(2) : '0.00';
+          const status = value.status || 'desconhecido';
+          // Mensagens idênticas às do Serial que você mostrou:
+          addLogLine('Enviado ao Firebase com sucesso!');
+          addLogLine(`Peso: ${peso}g | Status: ${status}`);
+        }
       }
-      snapshot.forEach(child => {
-        const item = child.val();
-        const linha = document.createElement("tr");
-        linha.innerHTML = `<td>${item.peso?.toFixed ? item.peso.toFixed(2) : item.peso}</td>
-                           <td>${item.data || "-"}</td>
-                           <td>${item.hora || "-"}</td>`;
-        tabela.prepend(linha); // mais recente no topo
-      });
-    }, error => {
-      tabela.innerHTML = `<tr><td colspan='3'>Erro: ${error.message}</td></tr>`;
-      console.error(error);
-    });
-  </script>
+    }
+  } catch (err) {
+    console.error('Erro fetch:', err);
+    addLogLine('Erro ao conectar ao Firebase: ' + err.message);
+  }
+}
+
+// limpar logs
+limparBtn.addEventListener('click', () => {
+  logsEl.textContent = '';
+});
+
+// polling periódico
+let pollTimer = null;
+async function startPolling() {
+  // fetch inicial
+  await pollOnce();
+  // cron
+  pollTimer = setInterval(pollOnce, POLL_INTERVAL_MS);
+}
+
+// iniciar
+startPolling();
+</script>
 </body>
 </html>
-
